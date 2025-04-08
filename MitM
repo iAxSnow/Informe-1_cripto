@@ -1,0 +1,101 @@
+import dpkt
+import itertools
+import os
+
+def obtener_mensaje_oculto(paquetes_icmp):
+    """
+    Obtiene el mensaje transmitido a través de paquetes ICMP,
+    probando todas las combinaciones posibles de letras minúsculas,
+    manteniendo los espacios en sus posiciones originales.
+
+    Args:
+        paquetes_icmp: Una lista de bytes, donde cada elemento representa
+                       el campo de datos de un paquete ICMP.
+
+    Returns:
+        Una lista de posibles mensajes en claro, con la opción más probable
+        marcada en verde (si se puede determinar una heurística).
+    """
+    posiciones_espacio = [i for i, paquete in enumerate(paquetes_icmp) if paquete == b' ']
+    num_caracteres_a_probar = len(paquetes_icmp) - len(posiciones_espacio)
+    posibles_letras = [chr(i) for i in range(ord('a'), ord('z') + 1)]
+    mensajes_posibles = []
+
+    # Generar todas las combinaciones posibles de letras para las posiciones no-espacio
+    for combinacion_letras in itertools.product(posibles_letras, repeat=num_caracteres_a_probar):
+        mensaje_actual = [''] * len(paquetes_icmp)
+        indice_letra = 0
+        for i in range(len(paquetes_icmp)):
+            if i in posiciones_espacio:
+                mensaje_actual[i] = ' '
+            else:
+                mensaje_actual[i] = combinacion_letras[indice_letra]
+                indice_letra += 1
+        mensajes_posibles.append("".join(mensaje_actual))
+
+    # Heurística simple para intentar identificar el mensaje más probable
+    # (Considerar la primera combinación generada como la más probable si existe alguna)
+    mensaje_probable = mensajes_posibles[0] if mensajes_posibles else ""
+
+    mensajes_con_formato = []
+    for mensaje in mensajes_posibles:
+        if mensaje == mensaje_probable and mensajes_posibles:
+            mensajes_con_formato.append(f"\033[92m{mensaje}\033[0m")  # Verde
+        else:
+            mensajes_con_formato.append(mensaje)
+
+    return mensajes_con_formato
+
+def analizar_pcapng(ruta_archivo):
+    """
+    Analiza un archivo .pcapng, extrae los paquetes ICMP y decodifica los datos del campo de datos.
+
+    Args:
+        ruta_archivo: La ruta completa al archivo .pcapng a analizar.
+
+    Returns:
+        Una lista de posibles mensajes transmitidos a través de los paquetes ICMP.
+    """
+    paquetes_icmp = []
+
+    try:
+        with open(ruta_archivo, "rb") as pcap_file:
+            pcap = dpkt.pcapng.Reader(pcap_file)
+            for ts, buf in pcap:  # Desempaquetar la tupla (timestamp, buffer)
+                eth = dpkt.ethernet.Ethernet(buf)
+                if eth.type == dpkt.ethernet.ETH_TYPE_IP:
+                    ip = eth.data
+                    if isinstance(ip, dpkt.ip.IP):  # Asegurarse de que ip es un objeto IP
+                        if ip.p == dpkt.ip.IP_PROTO_ICMP:
+                            icmp = ip.data
+                            if isinstance(icmp, dpkt.icmp.ICMP):  # Asegurarse de que icmp es un objeto ICMP
+                                if icmp.type == dpkt.icmp.ICMP_ECHO:
+                                    if icmp.data:
+                                        paquetes_icmp.append(bytes(icmp.data))
+    except FileNotFoundError:
+        print(f"Error: El archivo '{ruta_archivo}' no se encontró.")
+        return []
+    except Exception as e:
+        print(f"Ocurrió un error al leer el archivo: {e}")
+        return []
+
+    if not paquetes_icmp:
+        print("No se encontraron paquetes ICMP con datos en el archivo.")
+        return []
+
+    mensajes_posibles = obtener_mensaje_oculto(paquetes_icmp)
+    return mensajes_posibles
+
+if __name__ == "__main__":
+    nombre_archivo = input("Ingrese el nombre del archivo .pcapng: ")
+    ruta_completa = nombre_archivo  # Asumimos que está en el mismo directorio
+
+    mensajes_posibles = analizar_pcapng(ruta_completa)
+
+    if mensajes_posibles:
+        print("\nPosibles mensajes transmitidos:")
+        for mensaje in mensajes_posibles:
+            print(mensaje)
+
+        print("\nNota: La primera combinación generada se muestra en verde, manteniendo los espacios en sus posiciones originales.")
+        print("En un escenario real, se requerirían técnicas de análisis de lenguaje más avanzadas para una identificación precisa.")
