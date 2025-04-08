@@ -1,0 +1,59 @@
+def cifrado_cesar(texto, clave):
+
+    """
+
+    Cifra un texto usando el cifrado César, convirtiendo mayúsculas a minúsculas.
+
+
+
+    Args:
+
+        texto: El texto a cifrar.
+
+        clave: El número de posiciones a desplazar las letras.
+
+
+
+    Returns:
+
+        El texto cifrado.
+
+    """
+
+    resultado = ""
+
+    for caracter in texto:
+
+        if caracter.isalpha():
+
+            inicio = ord('a')
+
+            fin = ord('z')
+
+            caracter_minuscula = caracter.lower()
+
+            caracter_cifrado = chr((ord(caracter_minuscula) - inicio + clave) % 26 + inicio)
+
+        else:
+
+            caracter_cifrado = caracter
+
+        resultado += caracter_cifrado
+
+    return resultado
+
+
+
+# Entrada por consola
+
+texto_a_cifrar = input("Ingresa el texto a cifrar: ")
+
+clave_de_cifrado = int(input("Ingresa la clave de cifrado (número entero): "))
+
+
+
+# Cifrado y salida
+
+texto_cifrado = cifrado_cesar(texto_a_cifrar, clave_de_cifrado)
+
+print(f"Texto cifrado: {texto_cifrado}")
